@@ -26,16 +26,29 @@ func (err Error) Error() string {
 	}
 }
 
+func Errorf(status int, f string, args ...interface{}) Error {
+	return Error{status, fmt.Errorf(f, args...)}
+}
+
 func RequestError(err error) Error {
 	return Error{400, err}
 }
 
 func readRequest(request *http.Request, object interface{}) error {
-	if err := json.NewDecoder(request.Body).Decode(object); err != nil {
-		return Error{StatusUnprocessableEntity, err}
-	} else {
-		return nil
+	contentType := request.Header.Get("Content-Type")
+
+	switch contentType {
+	case "application/json":
+		if err := json.NewDecoder(request.Body).Decode(object); err != nil {
+			return Error{StatusUnprocessableEntity, err}
+		} else {
+			return nil
+		}
+
+	default:
+		return Errorf(http.StatusUnsupportedMediaType, "Unknown Content-Type: %v", contentType)
 	}
+
 }
 
 func writeResponse(responseWriter http.ResponseWriter, object interface{}) error {
@@ -47,22 +60,29 @@ func writeResponse(responseWriter http.ResponseWriter, object interface{}) error
 // Encodable resource
 type Resource interface{}
 
-// Resource that supports sub-Resources
+// Resource collection with sub-Resources
 type IndexResource interface {
+	// TODO: List() ([]Resource, error)
 	Index(name string) (Resource, error)
 }
 
-// apiResource that supports GET
+// Resource that supports GET
 type GetResource interface {
-	// Optional
+	// Return marshalable response resource
 	// Perform any independent post-processing + JSON encoding in the request handler goroutine.
 	// Must be goroutine-safe!
 	GetREST() (Resource, error)
 }
 
-// apiResource that supports POST
+// Resource that supports POST
 type PostResource interface {
+	// Return unmarshalable request resource
 	PostREST() (Resource, error)
+}
+
+// Resources that are notified after POST
+type MutableResource interface {
+	Apply() error
 }
 
 type API struct {
@@ -75,27 +95,56 @@ func MakeAPI(root Resource) API {
 	}
 }
 
-func (api API) index(path string) (Resource, error) {
+func (api API) index(path string) (Resource, []MutableResource, error) {
 	// lookup from root
 	var resource = api.root
+	var mutables []MutableResource
+
+	if mutableResource, ok := resource.(MutableResource); ok {
+		mutables = append(mutables, mutableResource)
+	}
 
 	for _, name := range strings.Split(path, "/") {
 		if indexResource, ok := resource.(IndexResource); !ok {
-			return resource, Error{http.StatusNotFound, nil}
+			return resource, nil, Error{http.StatusNotFound, nil}
 		} else if nextResource, err := indexResource.Index(name); err != nil {
-			return resource, err
+			return resource, nil, err
 		} else if nextResource == nil {
-			return nil, Error{http.StatusNotFound, nil}
+			return nil, nil, Error{http.StatusNotFound, nil}
 		} else {
 			resource = nextResource
 		}
+
+		if mutableResource, ok := resource.(MutableResource); ok {
+			mutables = append(mutables, mutableResource)
+		}
 	}
 
-	return resource, nil
+	// reverse
+	for i, j := 0, len(mutables)-1; i < j; i, j = i+1, j-1 {
+		mutables[i], mutables[j] = mutables[j], mutables[i]
+	}
+
+	return resource, mutables, nil
+}
+
+func (api API) apply(resource MutableResource, parents []MutableResource) error {
+	if resource != nil {
+		if err := resource.Apply(); err != nil {
+			return err
+		}
+	}
+	for _, resource := range parents {
+		if err := resource.Apply(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (api API) handle(w http.ResponseWriter, r *http.Request) error {
-	resource, err := api.index(r.URL.Path)
+	resource, mutableResources, err := api.index(r.URL.Path)
 
 	if err != nil {
 		return err
@@ -117,14 +166,21 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 	case "POST":
 		if postResource, ok := resource.(PostResource); !ok {
 			return Error{http.StatusMethodNotAllowed, nil}
-		} else if err := readRequest(r, resource); err != nil {
-			return err
 		} else if ret, err := postResource.PostREST(); err != nil {
 			return err
 		} else if ret == nil {
-			return Error{http.StatusNoContent, nil}
+			return Error{http.StatusNotFound, nil}
+		} else if err := readRequest(r, ret); err != nil {
+			return err
 		} else {
 			resource = ret
+		}
+
+		// apply
+		mutableResource, _ := resource.(MutableResource)
+
+		if err := api.apply(mutableResource, mutableResources); err != nil {
+			return err
 		}
 
 	default:
