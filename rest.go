@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -154,6 +153,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 	case "GET":
 		// resolve GET resource
 		if getResource, ok := resource.(GetResource); !ok {
+			log.Warnf("Not a GetResource: %T", resource)
 			return Error{http.StatusMethodNotAllowed, nil}
 		} else if ret, err := getResource.GetREST(); err != nil {
 			return err
@@ -165,6 +165,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 
 	case "POST":
 		if postResource, ok := resource.(PostResource); !ok {
+			log.Warnf("Not a PostResource: %T", resource)
 			return Error{http.StatusMethodNotAllowed, nil}
 		} else if ret, err := postResource.PostREST(); err != nil {
 			return err

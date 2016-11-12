@@ -1,9 +1,9 @@
 package web
 
 import (
-	"golang.org/x/net/websocket"
-	"log"
 	"net/http"
+
+	"golang.org/x/net/websocket"
 )
 
 const EVENTS_BUFFER = 100
