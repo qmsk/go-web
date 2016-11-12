@@ -51,6 +51,20 @@ func (options Options) RouteFile(url string, file string) Route {
 	}
 }
 
+func (options Options) RouteAPI(prefix string, root Resource) Route {
+	return Route{
+		Pattern: prefix,
+		Handler: http.StripPrefix(prefix, MakeAPI(root)),
+	}
+}
+
+func (options Options) RouteEvents(url string, eventChan chan Event) Route {
+	return Route{
+		Pattern: url,
+		Handler: MakeEvents(eventChan),
+	}
+}
+
 func (options Options) Server(routes ...Route) {
 	var serveMux = http.NewServeMux()
 
