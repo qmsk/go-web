@@ -28,9 +28,11 @@ func (err Error) Error() string {
 func Errorf(status int, f string, args ...interface{}) Error {
 	return Error{status, fmt.Errorf(f, args...)}
 }
-
 func RequestError(err error) Error {
-	return Error{400, err}
+	return Error{StatusUnprocessableEntity, err}
+}
+func RequestErrorf(f string, args ...interface{}) Error {
+	return Errorf(StatusUnprocessableEntity, f, args...)
 }
 
 func readRequest(request *http.Request, object interface{}) error {
@@ -39,7 +41,7 @@ func readRequest(request *http.Request, object interface{}) error {
 	switch contentType {
 	case "application/json":
 		if err := json.NewDecoder(request.Body).Decode(object); err != nil {
-			return Error{StatusUnprocessableEntity, err}
+			return RequestError(err)
 		} else {
 			return nil
 		}
