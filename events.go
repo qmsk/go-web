@@ -64,7 +64,7 @@ type Events struct {
 // Publish events from chan
 //
 // Close chan to stop
-func MakeEvents(eventChan chan Event) *Events {
+func MakeEvents(eventChan chan Event) Events {
 	events := Events{
 		registerChan:   make(chan chan Event),
 		unregisterChan: make(chan chan Event),
@@ -72,10 +72,10 @@ func MakeEvents(eventChan chan Event) *Events {
 
 	go events.run(eventChan)
 
-	return &events
+	return events
 }
 
-func (events *Events) run(eventChan chan Event) {
+func (events Events) run(eventChan chan Event) {
 	var state = Event(struct{}{})
 
 	clients := make(clientSet)
@@ -117,7 +117,7 @@ type eventsClient chan Event
 // Register new client
 //
 // recv on the returned chan
-func (events *Events) listen() eventsClient {
+func (events Events) listen() eventsClient {
 	eventChan := make(chan Event, EVENTS_BUFFER)
 
 	events.registerChan <- eventChan
@@ -128,7 +128,7 @@ func (events *Events) listen() eventsClient {
 // Request server to stop sending us events
 //
 // XXX: panics with send on closed chan if server has stopped
-func (events *Events) stop(eventsClient eventsClient) {
+func (events Events) stop(eventsClient eventsClient) {
 	events.unregisterChan <- eventsClient
 }
 
@@ -144,7 +144,7 @@ func (eventsClient eventsClient) serveWebsocket(websocketConn *websocket.Conn) e
 }
 
 // goroutine-safe websocket subscriber
-func (events *Events) ServeWebsocket(websocketConn *websocket.Conn) {
+func (events Events) ServeWebsocket(websocketConn *websocket.Conn) {
 	var eventsClient = events.listen()
 
 	if err := eventsClient.serveWebsocket(websocketConn); err != nil {
@@ -156,6 +156,6 @@ func (events *Events) ServeWebsocket(websocketConn *websocket.Conn) {
 	}
 }
 
-func (events *Events) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (events Events) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	websocket.Handler(events.ServeWebsocket).ServeHTTP(w, r)
 }

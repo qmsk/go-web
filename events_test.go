@@ -32,7 +32,7 @@ type testEvents struct {
 	writeGroup sync.WaitGroup
 	waitGroup  sync.WaitGroup
 	eventChan  chan Event
-	events     *Events
+	events     Events
 }
 
 // write events while sleeping
