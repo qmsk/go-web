@@ -81,6 +81,11 @@ type PostResource interface {
 	PostREST() (Resource, error)
 }
 
+type GetPostResource interface {
+	GetResource
+	PostResource
+}
+
 // Resources that are notified after POST
 type MutableResource interface {
 	Apply() error
