@@ -51,17 +51,17 @@ func (options Options) RouteFile(url string, file string) Route {
 	}
 }
 
-func (options Options) RouteAPI(prefix string, root Resource) Route {
+func (options Options) RouteAPI(prefix string, api API) Route {
 	return Route{
 		Pattern: prefix,
-		Handler: http.StripPrefix(prefix, MakeAPI(root)),
+		Handler: http.StripPrefix(prefix, api),
 	}
 }
 
-func (options Options) RouteEvents(url string, eventChan chan Event) Route {
+func (options Options) RouteEvents(url string, events Events) Route {
 	return Route{
 		Pattern: url,
-		Handler: MakeEvents(eventChan),
+		Handler: events,
 	}
 }
 
