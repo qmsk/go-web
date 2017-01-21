@@ -83,7 +83,7 @@ func (options Options) Server(routes ...Route) {
 		}
 
 		if err := server.ListenAndServe(); err != nil {
-			log.Printf("http:Server.ListenAndServe %v: %v", options.Listen, err)
+			log.WithError(err).Printf("http:Server.ListenAndServe %v", options.Listen)
 		}
 	}
 }
