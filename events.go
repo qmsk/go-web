@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 
 	"golang.org/x/net/websocket"
@@ -12,19 +13,25 @@ type Event interface{}
 
 type clientSet map[chan Event]bool
 
+// add to set of clients
 func (clientSet clientSet) register(clientChan chan Event) {
 	clientSet[clientChan] = true
 }
+
+// remove from set on behalf of client requesting stop(); the clientChan may already be closed
 func (clientSet clientSet) unregister(clientChan chan Event) {
-	// remove from set on behalf of client; the clientChan may already be closed
 	delete(clientSet, clientChan)
 }
+
+// remove from set on behalf of server; closes the clientChan to tell the client
+//
+// the client may trigger .unregister() later, which will be a no-op
 func (clientSet clientSet) drop(clientChan chan Event) {
-	// close and remove a dead client
-	// the client may trigger .unregister() later, but that's okay
 	close(clientChan)
 	delete(clientSet, clientChan)
 }
+
+// write event to client, drop client if stuck
 func (clientSet clientSet) send(clientChan chan Event, event Event) {
 	select {
 	case clientChan <- event:
@@ -35,6 +42,7 @@ func (clientSet clientSet) send(clientChan chan Event, event Event) {
 	}
 }
 
+// distribute events to clients, dropping clients if they are stuck
 func (clientSet clientSet) publish(event Event) {
 	for clientChan, _ := range clientSet {
 		clientSet.send(clientChan, event)
@@ -47,11 +55,15 @@ func (clientSet clientSet) close() {
 	}
 }
 
+// WebSocket publish/subscribe
 type Events struct {
 	registerChan   chan chan Event
 	unregisterChan chan chan Event
 }
 
+// Publish events from chan
+//
+// Close chan to stop
 func MakeEvents(eventChan chan Event) *Events {
 	events := Events{
 		registerChan:   make(chan chan Event),
@@ -99,7 +111,13 @@ func (events *Events) run(eventChan chan Event) {
 	}
 }
 
-func (events *Events) register() chan Event {
+// each subscriber has its own chan to receive from Events
+type eventsClient chan Event
+
+// Register new client
+//
+// recv on the returned chan
+func (events *Events) listen() eventsClient {
 	eventChan := make(chan Event, EVENTS_BUFFER)
 
 	events.registerChan <- eventChan
@@ -107,22 +125,34 @@ func (events *Events) register() chan Event {
 	return eventChan
 }
 
-func (events *Events) unregister(eventChan chan Event) {
-	events.unregisterChan <- eventChan
+// Request server to stop sending us events
+//
+// XXX: panics with send on closed chan if server has stopped
+func (events *Events) stop(eventsClient eventsClient) {
+	events.unregisterChan <- eventsClient
+}
+
+// Return error if aborting, nil if events closed
+func (eventsClient eventsClient) serveWebsocket(websocketConn *websocket.Conn) error {
+	for event := range eventsClient {
+		if err := websocket.JSON.Send(websocketConn, event); err != nil {
+			return fmt.Errorf("webSocket.JSON.Send: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // goroutine-safe websocket subscriber
 func (events *Events) ServeWebsocket(websocketConn *websocket.Conn) {
-	eventChan := events.register()
-	defer events.unregister(eventChan)
+	var eventsClient = events.listen()
 
-	for event := range eventChan {
-		// log.Printf("web:Events: write %v: %v", websocketConn, event)
-
-		if err := websocket.JSON.Send(websocketConn, event); err != nil {
-			log.Printf("webSocket.JSON.Send: %v\n", err)
-			return
-		}
+	if err := eventsClient.serveWebsocket(websocketConn); err != nil {
+		// stop, assuming that server is still alive
+		// will panic if server has stopped
+		events.stop(eventsClient)
+	} else {
+		// we do not need to request stop, server has unregistered us
 	}
 }
 
