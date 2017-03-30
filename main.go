@@ -23,6 +23,14 @@ func RoutePrefix(prefix string, handler http.Handler) Route {
 }
 
 // Return a route that services the tree relative to --http-static=
+func (options Options) Route(prefix string, handler http.Handler) Route {
+	return Route{
+		Pattern: prefix,
+		Handler: http.StripPrefix(prefix, handler),
+	}
+}
+
+// Return a route that services the tree relative to --http-static=
 func (options Options) RouteStatic(prefix string) Route {
 	var route = Route{Pattern: prefix}
 
