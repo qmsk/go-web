@@ -9,6 +9,7 @@ import (
 
 const EVENTS_BUFFER = 100
 
+type State interface{}
 type Event interface{}
 
 type clientSet map[chan Event]bool
@@ -55,8 +56,17 @@ func (clientSet clientSet) close() {
 	}
 }
 
+type EventConfig struct {
+	// recv from Events
+	StateFunc func() State
+
+	// send to Events
+	EventPush <-chan Event
+}
+
 // WebSocket publish/subscribe
 type Events struct {
+	config         EventConfig
 	registerChan   chan chan Event
 	unregisterChan chan chan Event
 }
@@ -64,20 +74,19 @@ type Events struct {
 // Publish events from chan
 //
 // Close chan to stop
-func MakeEvents(eventChan chan Event) Events {
+func MakeEvents(config EventConfig) Events {
 	events := Events{
+		config:         config,
 		registerChan:   make(chan chan Event),
 		unregisterChan: make(chan chan Event),
 	}
 
-	go events.run(eventChan)
+	go events.run(config)
 
 	return events
 }
 
-func (events Events) run(eventChan chan Event) {
-	var state = Event(struct{}{})
-
+func (events Events) run(config EventConfig) {
 	clients := make(clientSet)
 	defer clients.close()
 
@@ -90,13 +99,10 @@ func (events Events) run(eventChan chan Event) {
 		case clientChan := <-events.registerChan:
 			clients.register(clientChan)
 
-			// initial state
-			clients.send(clientChan, state)
-
 		case clientChan := <-events.unregisterChan:
 			clients.unregister(clientChan)
 
-		case event, ok := <-eventChan:
+		case event, ok := <-config.EventPush:
 			if !ok {
 				return
 			}
@@ -104,10 +110,16 @@ func (events Events) run(eventChan chan Event) {
 			// log.Printf("web:Events: publish: %v", event)
 
 			clients.publish(event)
-
-			// XXX
-			state = event
 		}
+	}
+}
+
+// pull current state from sender
+func (events Events) state() State {
+	if events.config.StateFunc != nil {
+		return events.config.StateFunc()
+	} else {
+		return struct{}{}
 	}
 }
 
@@ -117,12 +129,12 @@ type eventsClient chan Event
 // Register new client
 //
 // recv on the returned chan
-func (events Events) listen() eventsClient {
+func (events Events) listen() (State, eventsClient) {
 	eventChan := make(chan Event, EVENTS_BUFFER)
 
 	events.registerChan <- eventChan
 
-	return eventChan
+	return events.state(), eventChan
 }
 
 // Request server to stop sending us events
@@ -133,7 +145,13 @@ func (events Events) stop(eventsClient eventsClient) {
 }
 
 // Return error if aborting, nil if events closed
-func (eventsClient eventsClient) serveWebsocket(websocketConn *websocket.Conn) error {
+func (eventsClient eventsClient) serveWebsocket(websocketConn *websocket.Conn, state State) error {
+	// initial state
+	if err := websocket.JSON.Send(websocketConn, state); err != nil {
+		return fmt.Errorf("webSocket.JSON.Send: %v", err)
+	}
+
+	// update events
 	for event := range eventsClient {
 		if err := websocket.JSON.Send(websocketConn, event); err != nil {
 			return fmt.Errorf("webSocket.JSON.Send: %v", err)
@@ -145,9 +163,9 @@ func (eventsClient eventsClient) serveWebsocket(websocketConn *websocket.Conn) e
 
 // goroutine-safe websocket subscriber
 func (events Events) ServeWebsocket(websocketConn *websocket.Conn) {
-	var eventsClient = events.listen()
+	var state, eventsClient = events.listen()
 
-	if err := eventsClient.serveWebsocket(websocketConn); err != nil {
+	if err := eventsClient.serveWebsocket(websocketConn, state); err != nil {
 		// stop, assuming that server is still alive
 		// will panic if server has stopped
 		events.stop(eventsClient)

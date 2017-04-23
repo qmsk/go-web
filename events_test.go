@@ -85,7 +85,7 @@ func TestEvents(t *testing.T) {
 		eventChan: make(chan Event),
 	}
 
-	test.events = MakeEvents(test.eventChan)
+	test.events = MakeEvents(EventConfig{EventPush: test.eventChan})
 
 	// add followers
 	test.waitGroup.Add(1)
@@ -95,7 +95,7 @@ func TestEvents(t *testing.T) {
 		for count := 0; count <= READER_COUNT; count++ {
 			time.Sleep(time.Duration(rand.Float32() * READER_INTERVAL))
 
-			eventsClient := test.events.listen()
+			_, eventsClient := test.events.listen()
 
 			test.waitGroup.Add(1)
 			go test.reader(t, eventsClient)
