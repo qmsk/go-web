@@ -6,13 +6,25 @@ import (
 )
 
 type Options struct {
-	Listen string `long:"http-listen" value-name:"[HOST]:PORT" default:":8284"`
-	Static string `long:"http-static" value-name:"PATH"`
+	Listen             string `long:"http-listen" value-name:"[HOST]:PORT" default:":8284"`
+	Static             string `long:"http-static" value-name:"PATH"`
+	StaticCacheControl string `long:"http-static-cache-control" value-name:"HEADER-VALUE" default:"no-cache"`
 }
 
 type Route struct {
 	Pattern string
 	Handler http.Handler
+}
+
+type CacheFilter struct {
+	Handler      http.Handler
+	CacheControl string
+}
+
+func (cacheFilter CacheFilter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", cacheFilter.CacheControl)
+
+	cacheFilter.Handler.ServeHTTP(w, r)
 }
 
 func RoutePrefix(prefix string, handler http.Handler) Route {
@@ -33,11 +45,18 @@ func (options Options) Route(prefix string, handler http.Handler) Route {
 // Return a route that services the tree relative to --http-static=
 func (options Options) RouteStatic(prefix string) Route {
 	var route = Route{Pattern: prefix}
+	var handler http.Handler
 
 	if options.Static != "" {
 		log.Printf("Serve static %v from %v\n", prefix, options.Static)
 
-		route.Handler = http.StripPrefix(prefix, http.FileServer(http.Dir(options.Static)))
+		handler = http.FileServer(http.Dir(options.Static))
+
+		if options.StaticCacheControl != "" {
+			handler = CacheFilter{handler, options.StaticCacheControl}
+		}
+
+		route.Handler = http.StripPrefix(prefix, handler)
 	}
 
 	return route
