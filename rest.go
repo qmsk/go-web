@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/schema"
 	"net/http"
 	"strings"
 )
@@ -49,7 +50,16 @@ func readRequest(request *http.Request, object interface{}) error {
 	default:
 		return Errorf(http.StatusUnsupportedMediaType, "Unknown Content-Type: %v", contentType)
 	}
+}
 
+func readQuery(request *http.Request, resource QueryResource) error {
+	var decoder = schema.NewDecoder()
+
+	if err := decoder.Decode(resource.QuerySchema(), request.URL.Query()); err != nil {
+		return RequestError(err)
+	} else {
+		return nil
+	}
 }
 
 func writeResponse(responseWriter http.ResponseWriter, object interface{}) error {
@@ -65,6 +75,11 @@ type Resource interface{}
 type IndexResource interface {
 	// TODO: List() ([]Resource, error)
 	Index(name string) (Resource, error)
+}
+
+// Resoruce that decodes ?... query vars ussing github.com/gorilla/schema
+type QueryResource interface {
+	QuerySchema() interface{}
 }
 
 // Resource that supports GET
@@ -154,6 +169,14 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		return err
+	}
+
+	if queryResource, ok := resource.(QueryResource); !ok {
+
+	} else if err := readQuery(r, queryResource); err != nil {
+		return err
+	} else {
+
 	}
 
 	switch r.Method {
