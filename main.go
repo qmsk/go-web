@@ -48,7 +48,7 @@ func (options Options) RouteStatic(prefix string) Route {
 	var handler http.Handler
 
 	if options.Static != "" {
-		log.Printf("Serve static %v from %v\n", prefix, options.Static)
+		log.Infof("Serve %v from %v", prefix, options.Static)
 
 		handler = http.FileServer(http.Dir(options.Static))
 
@@ -109,8 +109,10 @@ func (options Options) Server(routes ...Route) {
 			Handler: serveMux,
 		}
 
+		log.Infof("Listen on %v...", options.Listen)
+
 		if err := server.ListenAndServe(); err != nil {
-			log.WithError(err).Printf("http:Server.ListenAndServe %v", options.Listen)
+			log.Errorf("ListenAndServe %v: %v", options.Listen, err)
 		}
 	}
 }

@@ -221,7 +221,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 	if err := writeResponse(w, resource); err != nil {
 		return err
 	} else {
-		log.Printf("%v %v: %#v", r.Method, r.URL.Path, resource)
+		log.Debugf("%v %v", r.Method, r.URL.Path)
 	}
 
 	return nil
