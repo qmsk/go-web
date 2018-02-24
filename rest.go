@@ -221,7 +221,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 	if err := writeResponse(w, resource); err != nil {
 		return err
 	} else {
-		log.Debugf("%v %v", r.Method, r.URL.Path)
+		log.Infof("%v %v: %T", r.Method, r.URL.Path, resource)
 	}
 
 	return nil
@@ -231,10 +231,16 @@ func (api API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := api.handle(w, r); err == nil {
 
 	} else if httpError, ok := err.(Error); !ok {
+		log.Infof("%v %v: HTTP %v: %v", r.Method, r.URL.Path, 500, err.Error())
+
 		http.Error(w, err.Error(), 500)
 	} else if httpError.Err != nil {
+		log.Infof("%v %v: HTTP %v: %v", r.Method, r.URL.Path, httpError.Status, httpError.Err.Error())
+
 		http.Error(w, httpError.Err.Error(), httpError.Status)
 	} else {
+		log.Infof("%v %v: HTTP %v", r.Method, r.URL.Path, httpError.Status)
+
 		http.Error(w, "", httpError.Status)
 	}
 }
