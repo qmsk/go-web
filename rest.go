@@ -54,10 +54,14 @@ func readRequest(request *http.Request, object interface{}) error {
 
 func readQuery(request *http.Request, resource QueryResource) error {
 	var decoder = schema.NewDecoder()
+	var obj = resource.QueryREST()
 
-	if err := decoder.Decode(resource.QueryREST(), request.URL.Query()); err != nil {
-		return RequestError(err)
+	decoder.IgnoreUnknownKeys(true)
+
+	if err := decoder.Decode(obj, request.URL.Query()); err != nil {
+		return RequestError(fmt.Errorf("Decode query for %T => %T: %v", resource, obj, err))
 	} else {
+		log.Debugf("Decode query for %T => %T: %#v", resource, obj, obj)
 		return nil
 	}
 }
