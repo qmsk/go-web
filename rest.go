@@ -246,7 +246,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 		} else if ret, err := postResource.PostREST(); err != nil {
 			return err
 		} else if ret == nil {
-			return Error{http.StatusNotFound, nil}
+			return Error{http.StatusNoContent, nil}
 		} else {
 			resource = ret
 		}
@@ -286,7 +286,7 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 		} else if ret, err := deleteResource.DeleteREST(); err != nil {
 			return err
 		} else if ret == nil {
-			return Error{http.StatusNotFound, nil}
+			return Error{http.StatusNoContent, nil}
 		} else {
 			resource = ret
 		}
