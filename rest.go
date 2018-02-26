@@ -36,20 +36,30 @@ func RequestErrorf(f string, args ...interface{}) Error {
 	return Errorf(StatusUnprocessableEntity, f, args...)
 }
 
-func readRequest(request *http.Request, object interface{}) error {
-	contentType := request.Header.Get("Content-Type")
+func readRequest(request *http.Request, resource IntoResource) error {
+	var contentType = request.Header.Get("Content-Type")
+	var object = resource.IntoREST()
 
 	switch contentType {
+	case "application/x-www-form-urlencoded":
+		if err := request.ParseForm(); err != nil {
+			return RequestError(err)
+		} else if err := schema.NewDecoder().Decode(object, request.PostForm); err != nil {
+			return RequestError(err)
+		}
+
 	case "application/json":
 		if err := json.NewDecoder(request.Body).Decode(object); err != nil {
 			return RequestError(err)
-		} else {
-			return nil
 		}
 
 	default:
 		return Errorf(http.StatusUnsupportedMediaType, "Unknown Content-Type: %v", contentType)
 	}
+
+	log.Debugf("Decode %v request for %T => %T: %#v", contentType, resource, object, object)
+
+	return nil
 }
 
 func readQuery(request *http.Request, resource QueryResource) error {
@@ -83,7 +93,14 @@ type IndexResource interface {
 
 // Resoruce that decodes ?... query vars ussing github.com/gorilla/schema
 type QueryResource interface {
+	// Return object to unmarshal query params into
 	QueryREST() interface{}
+}
+
+// Resoruce that decodes request body vars using either encoding/json or github.com/gorilla/schema
+type IntoResource interface {
+	// Return object to unmarshal query params into
+	IntoREST() interface{}
 }
 
 // Resource that supports GET
@@ -96,7 +113,9 @@ type GetResource interface {
 
 // Resource that supports POST
 type PostResource interface {
-	// Return unmarshalable request resource
+	IntoResource
+
+	// Return marshalable response resource
 	PostREST() (Resource, error)
 }
 
@@ -106,6 +125,7 @@ type GetPostResource interface {
 }
 
 // Resources that are notified after POST
+// Called recursively for any indexed resources in reverse order
 type MutableResource interface {
 	ApplyREST() error
 }
@@ -207,12 +227,12 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 		if postResource, ok := resource.(PostResource); !ok {
 			log.Warnf("Not a PostResource: %T", resource)
 			return Error{http.StatusMethodNotAllowed, nil}
+		} else if err := readRequest(r, postResource); err != nil {
+			return err
 		} else if ret, err := postResource.PostREST(); err != nil {
 			return err
 		} else if ret == nil {
 			return Error{http.StatusNotFound, nil}
-		} else if err := readRequest(r, ret); err != nil {
-			return err
 		} else {
 			resource = ret
 		}
