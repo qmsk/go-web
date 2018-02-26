@@ -55,7 +55,7 @@ func readRequest(request *http.Request, object interface{}) error {
 func readQuery(request *http.Request, resource QueryResource) error {
 	var decoder = schema.NewDecoder()
 
-	if err := decoder.Decode(resource.QuerySchema(), request.URL.Query()); err != nil {
+	if err := decoder.Decode(resource.QueryREST(), request.URL.Query()); err != nil {
 		return RequestError(err)
 	} else {
 		return nil
@@ -79,7 +79,7 @@ type IndexResource interface {
 
 // Resoruce that decodes ?... query vars ussing github.com/gorilla/schema
 type QueryResource interface {
-	QuerySchema() interface{}
+	QueryREST() interface{}
 }
 
 // Resource that supports GET
@@ -103,7 +103,7 @@ type GetPostResource interface {
 
 // Resources that are notified after POST
 type MutableResource interface {
-	Apply() error
+	ApplyREST() error
 }
 
 type API struct {
@@ -151,12 +151,12 @@ func (api API) index(path string) (Resource, []MutableResource, error) {
 
 func (api API) apply(resource MutableResource, parents []MutableResource) error {
 	if resource != nil {
-		if err := resource.Apply(); err != nil {
+		if err := resource.ApplyREST(); err != nil {
 			return err
 		}
 	}
 	for _, resource := range parents {
-		if err := resource.Apply(); err != nil {
+		if err := resource.ApplyREST(); err != nil {
 			return err
 		}
 	}
