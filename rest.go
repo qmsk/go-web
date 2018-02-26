@@ -119,6 +119,14 @@ type PostResource interface {
 	PostREST() (Resource, error)
 }
 
+// Resource that supports PUT
+type PutResource interface {
+	IntoResource
+
+	// Return marshalable response resource
+	PutREST() (Resource, error)
+}
+
 type GetPostResource interface {
 	GetResource
 	PostResource
@@ -230,6 +238,27 @@ func (api API) handle(w http.ResponseWriter, r *http.Request) error {
 		} else if err := readRequest(r, postResource); err != nil {
 			return err
 		} else if ret, err := postResource.PostREST(); err != nil {
+			return err
+		} else if ret == nil {
+			return Error{http.StatusNotFound, nil}
+		} else {
+			resource = ret
+		}
+
+		// apply
+		mutableResource, _ := resource.(MutableResource)
+
+		if err := api.apply(mutableResource, mutableResources); err != nil {
+			return err
+		}
+
+	case "PUT":
+		if putResource, ok := resource.(PutResource); !ok {
+			log.Warnf("Not a PutResource: %T", resource)
+			return Error{http.StatusMethodNotAllowed, nil}
+		} else if err := readRequest(r, putResource); err != nil {
+			return err
+		} else if ret, err := putResource.PutREST(); err != nil {
 			return err
 		} else if ret == nil {
 			return Error{http.StatusNotFound, nil}
