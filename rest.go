@@ -116,7 +116,9 @@ func MakeAPI(root Resource) API {
 	}
 }
 
-func (api API) index(path string) (Resource, []MutableResource, error) {
+func (api API) lookup(r *http.Request) (Resource, []MutableResource, error) {
+	var path = r.URL.Path
+
 	// lookup from root
 	var resource = api.root
 	var mutables []MutableResource
@@ -126,6 +128,12 @@ func (api API) index(path string) (Resource, []MutableResource, error) {
 	}
 
 	for _, name := range strings.Split(path, "/") {
+		if queryResource, ok := resource.(QueryResource); !ok {
+
+		} else if err := readQuery(r, queryResource); err != nil {
+			return resource, nil, err
+		}
+
 		if indexResource, ok := resource.(IndexResource); !ok {
 			return resource, nil, Error{http.StatusNotFound, nil}
 		} else if nextResource, err := indexResource.Index(name); err != nil {
@@ -139,6 +147,12 @@ func (api API) index(path string) (Resource, []MutableResource, error) {
 		if mutableResource, ok := resource.(MutableResource); ok {
 			mutables = append(mutables, mutableResource)
 		}
+	}
+
+	if queryResource, ok := resource.(QueryResource); !ok {
+
+	} else if err := readQuery(r, queryResource); err != nil {
+		return resource, nil, err
 	}
 
 	// reverse
@@ -165,18 +179,10 @@ func (api API) apply(resource MutableResource, parents []MutableResource) error 
 }
 
 func (api API) handle(w http.ResponseWriter, r *http.Request) error {
-	resource, mutableResources, err := api.index(r.URL.Path)
+	resource, mutableResources, err := api.lookup(r)
 
 	if err != nil {
 		return err
-	}
-
-	if queryResource, ok := resource.(QueryResource); !ok {
-
-	} else if err := readQuery(r, queryResource); err != nil {
-		return err
-	} else {
-
 	}
 
 	switch r.Method {
