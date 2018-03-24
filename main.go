@@ -2,12 +2,13 @@ package web
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"path"
 )
 
 type Options struct {
-	Listen             string `long:"http-listen" value-name:"[HOST]:PORT" default:":8284"`
+	Listen             string `long:"http-listen" value-name:"[HOST]:PORT | /PATH" default:":8284"`
 	Static             string `long:"http-static" value-name:"PATH"`
 	StaticCacheControl string `long:"http-static-cache-control" value-name:"HEADER-VALUE" default:"no-cache"`
 }
@@ -104,7 +105,22 @@ func (options Options) Server(routes ...Route) error {
 		serveMux.Handle(route.Pattern, route.Handler)
 	}
 
-	if options.Listen != "" {
+	if options.Listen == "" {
+
+	} else if options.Listen[0] == '/' || options.Listen[0] == '.' {
+		var server = http.Server{
+			Handler: serveMux,
+		}
+
+		log.Infof("Listen on unix:%v...", options.Listen)
+
+		if listener, err := net.Listen("unix", options.Listen); err != nil {
+			return err
+		} else if err := server.Serve(listener); err != nil {
+			return fmt.Errorf("Server %v: %v", options.Listen, err)
+		}
+
+	} else {
 		var server = http.Server{
 			Addr:    options.Listen,
 			Handler: serveMux,
