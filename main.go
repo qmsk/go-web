@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"path"
 )
@@ -92,7 +93,7 @@ func (options Options) RouteEvents(url string, events Events) Route {
 	}
 }
 
-func (options Options) Server(routes ...Route) {
+func (options Options) Server(routes ...Route) error {
 	var serveMux = http.NewServeMux()
 
 	for _, route := range routes {
@@ -112,7 +113,9 @@ func (options Options) Server(routes ...Route) {
 		log.Infof("Listen on %v...", options.Listen)
 
 		if err := server.ListenAndServe(); err != nil {
-			log.Errorf("ListenAndServe %v: %v", options.Listen, err)
+			return fmt.Errorf("ListenAndServe %v: %v", options.Listen, err)
 		}
 	}
+
+	return nil
 }
