@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +18,9 @@ type APIRequest struct {
 }
 type APIResponse struct {
 	StatusCode int
-	Object     interface{}
+	Text       string
+
+	Object interface{}
 }
 
 type APITest struct {
@@ -65,6 +69,18 @@ func TestAPI(t *testing.T, test APITest) {
 
 	if test.Response.StatusCode != 0 && test.Response.StatusCode != response.StatusCode {
 		t.Errorf("%v %v => HTTP %v, expected %v", test.Request.Method, test.Request.Target, response.StatusCode, test.Response.StatusCode)
+	}
+
+	if test.Response.Text == "" {
+
+	} else if contentType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type")); err != nil {
+		panic(err)
+	} else if contentType != "text/plain" {
+		t.Errorf("%v %v => HTTP %v with unexpected non-text Content-Type:%v", test.Request.Method, test.Request.Target, response.StatusCode, contentType)
+	} else if bytes, err := ioutil.ReadAll(response.Body); err != nil {
+		panic(err)
+	} else if string(bytes) != test.Response.Text {
+		t.Errorf("%v %v => HTTP %v with incorrect response: %#v", test.Request.Method, test.Request.Target, response.StatusCode, string(bytes))
 	}
 
 	if test.Response.Object == nil {
