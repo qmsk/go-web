@@ -157,6 +157,11 @@ func MakeAPI(root Resource) API {
 func (api API) lookup(r *http.Request) (Resource, []MutableResource, error) {
 	var path = r.URL.Path
 
+	// normalize path (per http.StripPrefix behavior)
+	if path[0] == '/' {
+		path = path[1:]
+	}
+
 	// lookup from root
 	var resource = api.root
 	var mutables []MutableResource
